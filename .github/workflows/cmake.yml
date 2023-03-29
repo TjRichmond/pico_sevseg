@@ -18,16 +18,46 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Clean workspace
+      run: |
+        echo "Cleaning up previous run"
+        rm -rf "${{ github.workspace }}"
+        mkdir -p "${{ github.workspace }}"
+    
+    - name: Checkout pico_sevseg
+      uses: actions/checkout@v3
+      with:
+        path: pico-sevseg
+    
+    - name: Checkout pico-sdk
+      uses: actions/checkout@v3
+      with:
+        repository: raspberrypi/pico-sdk
+        path: pico-sdk
+        
+    - name: Checkout pico-sdk submodules
+      working-directory: ${{github.workspace}}/pico-sdk
+      run: git submodule update --init
+
+    - name: Create Build Enviornment
+      working-directory: ${{github.workspace}}/pico-sevseg
+      run: cmake -E make_directory ${{github.workspace}}/pico-sevseg/build
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      shell: bash
+      working-directory: ${{github.workspace}}/pico-sevseg/build
+      run: PICO_SDK_PATH=../../pico-sdk cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+
+    - name: Get core count
+      id: core_count
+      run: cat /proc/cpuinfo | grep processor | wc -l
 
     - name: Build
-      # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+      working-directory: ${{github.workspace}}/pico-sevseg/build
+      shell: bash
+      run: cmake --build . --config $BUILD_TYPE --parallel ${{steps.core_count.outputs.output}}
 
     - name: Test
       working-directory: ${{github.workspace}}/build
